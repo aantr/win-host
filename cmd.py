@@ -96,7 +96,11 @@ def cmd(s: str, directory='', v=False):
         return 7, 0
 
     if s[0] == '.':
-        variables = {'im': os.path.join(directory, 'images')}
+        # ?
+        variables = {'im': os.path.join(directory, 'images'),
+                     'path': current_path}
+        for k, v in variables:
+            s = s.replace(f'?{k}', v)
         if s[:4] == '.exe':
             if len(s.split()) >= 2:
                 work = os.path.join(directory, 'executable')
