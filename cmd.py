@@ -10,6 +10,7 @@ import autoit
 from urllib.request import urlretrieve
 
 from github import Github, InputGitTreeElement
+import shlex
 
 current_path = ''
 infoA = False
@@ -142,131 +143,123 @@ def cmd(s: str, directory='', v=False):
                  'path': current_path}
     for k, v in variables.items():
         s = s.replace(f'?{k}', v)
-
-    if s[0] == '.':
-        if s[:4] == '.exe':
-            if len(s.split()) >= 2:
-                work = os.path.join(directory, 'executable')
-                name = to_exe(s.split()[1])
-                folder = name[:-4]
-                if os.path.exists(os.path.join(work, folder, name)):
-                    s = temp(os.path.join(work, folder, name), 'z1MSImc4eBoAd')
-                    command(s)
-                    return b''
-                return 'Unknown exe'.encode('cp866')
-            return 'Wrong syntax'.encode('cp866')
-        elif s[:4] == '.cls':
-            if len(s.split()) >= 2:
-                name = to_exe(s.split()[1])
-                s = f'taskkill /f /im {name}'
-                command(s)
+    cmd_name, *args = list(map(lambda x: x.strip('"').strip("'"),
+                               shlex.split(s, posix=False)))
+    if cmd_name == '.exe':
+        if len(args) == 1:
+            work = os.path.join(directory, 'executable')
+            name = to_exe(args[0])
+            folder = name[:-4]
+            if os.path.exists(os.path.join(work, folder, name)):
+                t = temp(os.path.join(work, folder, name), 'z1MSImc4eBoAd')
+                command(t)
                 return b''
-            return 'Wrong syntax'.encode('cp866')
-        elif s[:10] == '.download ':
-            p = s[10:s.rfind(' ')].strip()
-            url = s[s.rfind(' '):].strip()
-            if os.path.exists(p) or os.path.exists(p[:p.rfind('\\')]):
-                urlretrieve(load_prefix + url, p)
-                return b''
-            return 'No such dir'.encode('cp866')
-        elif s.startswith('.upload'):
-            args = s.split()[1:]
-            if len(args) == 3:
-                path, token, repo = args
-                try:
-                    github_upload(token, repo, path)
-                except Exception as e:
-                    return f'Error: {e}'.encode('cp866')
-                return b''
-            return 'Wrong syntax'.encode('cp866')
-        elif s[:3] == '.bg':
-            if len(s.split()) >= 2:
-                p = s.split()[1]
-                if p == 'A':
-                    infoA = not infoA
-                    return str(infoA).encode('cp866')
-                ims = os.listdir(variables['im'])
-                if p in map(lambda j: j if '.' not in j else j[:j.rfind('.')], ims):
-                    for i in ['.jpg', '.png', '.bmp']:
-                        if p + i in ims:
-                            p = p + i
-                            break
-                if os.path.exists(os.path.join(variables['im'], p)):
-                    set_wallpaper(os.path.join(variables['im'], p), infoA)
-                    return b''
-                return 'No such im'.encode('cp866')
-            else:
-                return 'Wrong syntax'.encode('cp866')
-
-        elif s[:3] == '.ls':
-            if len(s.split()) >= 2:
-                p = s[4:]
-                if p == 'root':
-                    current_path = ''
-                elif p == '..' and len(os.path.split(current_path)) >= 1:
-                    current_path = os.path.split(current_path)[0]
-                elif os.path.isdir(os.path.join(current_path, p)):
-                    current_path = os.path.join(current_path, p)
-                else:
-                    return 'No such dir'.encode('cp866')
-            else:
-                if current_path == '':
-                    s = get_disks()
-                    return '\n'.join(['\n'] + s).encode('cp866')
-                return '\n'.join([current_path] + os.listdir(current_path)).encode('cp866')
+            return 'Unknown exe'.encode('cp866')
+        return 'Wrong syntax'.encode('cp866')
+    elif cmd_name == '.cls':
+        if args:
+            name = to_exe(args[0])
+            s = f'taskkill /f /im {name}'
+            command(s)
             return b''
-        elif s[:5] == '.curs':
-            if len(s.split()) >= 2:
-                t = s.split()[1]
-                sleep_cursor(float(t))
+        return 'Wrong syntax'.encode('cp866')
+    elif cmd_name == '.download':
+        return b''
+    elif cmd_name == '.upload':
+        if len(args) == 3:
+            path, token, repo = args
+            try:
+                github_upload(token, repo, path)
+            except Exception as e:
+                return f'Error: {e}'.encode('cp866')
+            return b''
+        return 'Wrong syntax'.encode('cp866')
+    elif cmd_name == '.bg':
+        if len(args) == 1:
+            p = args[0]
+            if p == 'A':
+                infoA = not infoA
+                return str(infoA).encode('cp866')
+            ims = os.listdir(variables['im'])
+            if p in map(lambda j: j if '.' not in j else j[:j.rfind('.')], ims):
+                for i in ['.jpg', '.png', '.bmp']:
+                    if p + i in ims:
+                        p = p + i
+                        break
+            if os.path.exists(os.path.join(variables['im'], p)):
+                set_wallpaper(os.path.join(variables['im'], p), infoA)
                 return b''
+            return 'No such im'.encode('cp866')
+        else:
             return 'Wrong syntax'.encode('cp866')
-        elif s[:5] == '.note':
-            if len(s.split()) >= 2:
-                t = s[6:]
-                write_notepad(t)
-                return b''
-            return 'Wrong syntax'.encode('cp866')
-        elif s[:3] == '.f4':
-            if len(s.split()) >= 2:
-                t = float(s.split()[1])
-                time.sleep(t)
-                close_active_win()
-                return b''
-            return 'Wrong syntax'.encode('cp866')
-        elif s[:6] == '.write':
-            if len(s.split()) >= 3:
-                time_sleep = float(s.split()[1])
-                time.sleep(time_sleep)
-                t = ' '.join(s.split()[2:])
-                autoit.send(t)
-                return b''
-            return 'Wrong syntax'.encode('cp866')
-        elif s[:9] == '.movecurs':
-            if len(s.split()) >= 3:
-                time_sleep = float(s.split()[1])
-                time.sleep(time_sleep)
-                for i in s.split()[2:]:
-                    x, y = autoit.mouse_get_pos()
-                    i = i.split('.')
-                    autoit.mouse_move(x + int(i[0]), y + int(i[1]), speed=-1)
-                return b''
-            return 'Wrong syntax'.encode('cp866')
-        elif s[:9] == '.downcurs':
-            if len(s.split()) >= 2:
-                t = float(s.split()[1])
-                cursor_down[0], cursor_down[1] = t, time.time()
-                return b''
-            return 'Wrong syntax'.encode('cp866')
-        elif s.startswith('.print'):
-            return s[s.find(' '):].encode('cp866')
-        return 'No such command'.encode('cp866')
-    elif s[0] == '?':
-        s = s[1:]
-        msg = command(s, True)
-        return msg
-    command(s)
-    return b''
+    elif cmd_name == '.ls':
+        if len(args) == 1:
+            p = args[0]
+            if p == 'root':
+                current_path = ''
+            elif p == '..' and len(os.path.split(current_path)) >= 1:
+                current_path = os.path.split(current_path)[0]
+            elif os.path.isdir(os.path.join(current_path, p)):
+                current_path = os.path.join(current_path, p)
+            else:
+                return 'No such dir'.encode('cp866')
+        else:
+            if current_path == '':
+                return '\n'.join(['\n'] + get_disks()).encode('cp866')
+            return '\n'.join([current_path] + os.listdir(current_path)).encode('cp866')
+        return b''
+    elif cmd_name == '.curs':
+        if len(args) == 1:
+            t = args[0]
+            sleep_cursor(float(t))
+            return b''
+        return 'Wrong syntax'.encode('cp866')
+    elif cmd_name == '.note':
+        if len(args) == 1:
+            t = args[0]
+            write_notepad(t)
+            return b''
+        return 'Wrong syntax'.encode('cp866')
+    elif cmd_name == '.f4':
+        if len(args) == 1:
+            t = float(args[0])
+            time.sleep(t)
+            close_active_win()
+            return b''
+        return 'Wrong syntax'.encode('cp866')
+    elif cmd_name == '.write':
+        if len(args) == 2:
+            time_sleep = float(args[0])
+            time.sleep(time_sleep)
+            autoit.send(args[1])
+            return b''
+        return 'Wrong syntax'.encode('cp866')
+    elif cmd_name == '.movecurs':
+        if len(args) == 2:
+            time_sleep = float(args[0])
+            time.sleep(time_sleep)
+            for i in args[1:]:
+                x, y = autoit.mouse_get_pos()
+                i = i.split('.')
+                autoit.mouse_move(x + int(i[0]), y + int(i[1]), speed=-1)
+            return b''
+        return 'Wrong syntax'.encode('cp866')
+    elif cmd_name == '.downcurs':
+        if len(args) == 1:
+            t = float(args[0])
+            cursor_down[0], cursor_down[1] = t, time.time()
+            return b''
+        return 'Wrong syntax'.encode('cp866')
+    elif cmd_name == '.print':
+        return ' '.join(args).encode('cp866')
+    elif s[0] != '.':
+        if s[0] == '?':
+            msg = command(s[1:], True)
+            return msg
+        else:
+            command(s)
+            return b''
+    return 'No such command'.encode('cp866')
 
 
 def track(directory=''):
