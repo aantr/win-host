@@ -100,7 +100,7 @@ def cmd(s: str, directory='', v=False):
         # ?
         variables = {'im': os.path.join(directory, 'images'),
                      'path': current_path}
-        for k, v in variables:
+        for k, v in variables.items():
             s = s.replace(f'?{k}', v)
         if s[:4] == '.exe':
             if len(s.split()) >= 2:
