@@ -92,6 +92,7 @@ def close_active_win():
 
 
 def cmd(s: str, directory='', v=False):
+    global current_path, infoA, cursor_down
     if v:
         return 7, 1
 
@@ -132,7 +133,6 @@ def cmd(s: str, directory='', v=False):
             url = load_prefix + url
             return cmd('.download ' + p + ' ' + url)
         elif s[:3] == '.bg':
-            global infoA
             if len(s.split()) >= 2:
                 p = s.split()[1]
                 if p == 'A':
@@ -152,7 +152,6 @@ def cmd(s: str, directory='', v=False):
                 return 'Wrong syntax'.encode('cp866')
 
         elif s[:3] == '.ls':
-            global current_path
             if len(s.split()) >= 2:
                 p = s[4:]
                 if p == 'root':
@@ -209,7 +208,6 @@ def cmd(s: str, directory='', v=False):
         elif s[:9] == '.downcurs':
             if len(s.split()) >= 2:
                 t = float(s.split()[1])
-                global cursor_down
                 cursor_down[0], cursor_down[1] = t, time.time()
                 return b''
             return 'Wrong syntax'.encode('cp866')
