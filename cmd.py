@@ -93,7 +93,7 @@ def close_active_win():
 
 def cmd(s: str, directory='', v=False):
     if v:
-        return 7, 0
+        return 7, 1
 
     if s[0] == '.':
         # ?
@@ -213,8 +213,8 @@ def cmd(s: str, directory='', v=False):
                 cursor_down[0], cursor_down[1] = t, time.time()
                 return b''
             return 'Wrong syntax'.encode('cp866')
-        elif s == '.hello':
-            return 'Hello'.encode('cp866')
+        elif s.startswith('.print'):
+            return s[s.find(' ')+1:].encode('cp866')
 
         return 'No such command'.encode('cp866')
     elif s[0] == '?':
