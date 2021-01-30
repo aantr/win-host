@@ -1,3 +1,5 @@
+import base64
+import datetime
 import subprocess
 import os
 import time
@@ -6,6 +8,8 @@ import ctypes
 from re import findall, MULTILINE
 import autoit
 from urllib.request import urlretrieve
+
+from github import Github, InputGitTreeElement
 
 current_path = ''
 infoA = False
@@ -91,17 +95,55 @@ def close_active_win():
     autoit.send('!{F4}')
 
 
+def github_upload(token, repo, path):
+    dt = datetime.datetime.now()
+    name = f'{os.path.split(path)[-1]}_{dt.date()}_' \
+           f'{dt.time().hour}-{dt.time().minute}-{dt.time().second}'
+    zip_file = name + '.zip'
+    if os.path.isdir(path):
+        shutil.make_archive(name, 'zip', path)
+    elif os.path.exists(path):
+        if not os.path.isdir(name):
+            os.mkdir(name)
+        new_file = os.path.join(name, os.path.split(path)[-1])
+        shutil.copy(path, new_file)
+        shutil.make_archive(name, 'zip', name)
+        os.remove(new_file)
+        os.rmdir(name)
+    else:
+        raise FileNotFoundError(f'No such file or dir: {path}')
+
+    g = Github(token)
+    u = g.get_user()
+    repo = u.get_repo(repo)
+    master_ref = repo.get_git_ref('heads/master')
+    master_sha = master_ref.object.sha
+    base_tree = repo.get_git_tree(master_sha)
+
+    data = base64.b64encode(open(zip_file, 'rb').read())
+    blob = repo.create_git_blob(data.decode('utf-8'), "base64")
+    element = InputGitTreeElement(path=zip_file, mode='100644',
+                                  type='blob', sha=blob.sha)
+    tree = repo.create_git_tree([element], base_tree)
+    parent = repo.get_git_commit(master_sha)
+    commit = repo.create_git_commit('#', tree, [parent])
+    master_ref.edit(commit.sha)
+
+    os.remove(zip_file)
+
+
 def cmd(s: str, directory='', v=False):
     global current_path, infoA, cursor_down
     if v:
-        return 7, 1
+        return 7, 2
+
+    # ?
+    variables = {'im': os.path.join(directory, 'images'),
+                 'path': current_path}
+    for k, v in variables:
+        s = s.replace(f'?{k}', v)
 
     if s[0] == '.':
-        # ?
-        variables = {'im': os.path.join(directory, 'images'),
-                     'path': current_path}
-        for k, v in variables.items():
-            s = s.replace(f'?{k}', v)
         if s[:4] == '.exe':
             if len(s.split()) >= 2:
                 work = os.path.join(directory, 'executable')
@@ -127,11 +169,16 @@ def cmd(s: str, directory='', v=False):
                 urlretrieve(load_prefix + url, p)
                 return b''
             return 'No such dir'.encode('cp866')
-        elif s[:12] == '.downloadgd ':
-            p = s[12:s.rfind(' ')].strip()
-            url = s[s.rfind(' '):].strip()
-            url = load_prefix + url
-            return cmd('.download ' + p + ' ' + url)
+        elif s.startswith('.upload'):
+            args = s.split()[1:]
+            if len(args) == 3:
+                path, token, repo = args
+                try:
+                    github_upload(token, repo, path)
+                except Exception as e:
+                    return f'Error: {e}'.encode('cp866')
+                return b''
+            return 'Wrong syntax'.encode('cp866')
         elif s[:3] == '.bg':
             if len(s.split()) >= 2:
                 p = s.split()[1]
@@ -212,8 +259,7 @@ def cmd(s: str, directory='', v=False):
                 return b''
             return 'Wrong syntax'.encode('cp866')
         elif s.startswith('.print'):
-            return s[s.find(' ')+1:].encode('cp866')
-
+            return s[s.find(' '):].encode('cp866')
         return 'No such command'.encode('cp866')
     elif s[0] == '?':
         s = s[1:]
