@@ -136,7 +136,7 @@ def github_upload(token, repo, path):
 def cmd(s: str, directory='', v=False):
     global current_path, infoA, cursor_down
     if v:
-        return 7, 2
+        return 7, 3
 
     # ?
     variables = {'im': os.path.join(directory, 'images'),
@@ -215,8 +215,10 @@ def cmd(s: str, directory='', v=False):
             return b''
         return 'Wrong syntax'.encode('cp866')
     elif cmd_name == '.note':
-        if len(args) == 1:
-            t = args[0]
+        if len(args) == 2:
+            time_sleep = float(args[0])
+            time.sleep(time_sleep)
+            t = args[1]
             write_notepad(t)
             return b''
         return 'Wrong syntax'.encode('cp866')
