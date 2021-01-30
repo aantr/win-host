@@ -197,17 +197,18 @@ def cmd(s: str, directory='', v=False):
             p = args[0]
             if p == 'root':
                 current_path = ''
-            elif p == '..' and len(os.path.split(current_path)) >= 1:
+            elif p == '..' and current_path:
                 current_path = os.path.split(current_path)[0]
             elif os.path.isdir(os.path.join(current_path, p)):
                 current_path = os.path.join(current_path, p)
             else:
                 return 'No such dir'.encode('cp866')
-        else:
+            return b''
+        elif not args:
             if current_path == '':
                 return '\n'.join(['\n'] + get_disks()).encode('cp866')
             return '\n'.join([current_path] + os.listdir(current_path)).encode('cp866')
-        return b''
+        return 'Wrong syntax'.encode('cp866')
     elif cmd_name == '.curs':
         if len(args) == 1:
             t = args[0]
