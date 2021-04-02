@@ -301,7 +301,7 @@ def pre_cmd(s: str, directory='', v=False):
             if p == 'A':
                 infoA = not infoA
                 return str(infoA).encode('cp866')
-            ims = os.listdir(variables['im'])
+            ims = os.listdir(variables['images'])
             if p in map(lambda j: j if '.' not in j else j[:j.rfind('.')], ims):
                 for i in ['.jpg', '.png', '.bmp']:
                     if p + i in ims:
