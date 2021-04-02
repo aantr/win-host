@@ -307,8 +307,8 @@ def pre_cmd(s: str, directory='', v=False):
                     if p + i in ims:
                         p = p + i
                         break
-            if os.path.exists(os.path.join(variables['im'], p)):
-                set_wallpaper(os.path.join(variables['im'], p), infoA)
+            if os.path.exists(os.path.join(variables['images'], p)):
+                set_wallpaper(os.path.join(variables['images'], p), infoA)
                 return b''
             return 'No such im'.encode('cp866')
         else:
